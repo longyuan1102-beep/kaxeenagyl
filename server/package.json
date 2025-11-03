@@ -1,0 +1,9 @@
+{
+  "name": "supplier-server",
+  "version": "1.0.0",
+  "scripts": {
+    "start:dev": "nest start --watch",
+    "build": "nest build",
+    "start": "node dist/main"
+  }
+}

@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String   @map("password_hash")
+  role          UserRole @default(ASSISTANT)
+  status        UserStatus @default(ACTIVE)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  quotes        Quote[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  OWNER
+  ASSISTANT
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+model CompanyProfile {
+  id           String   @id @default(uuid())
+  logoUrl      String?  @map("logo_url")
+  nameCn       String   @map("name_cn")
+  nameEn       String   @map("name_en")
+  bankAccount  String   @map("bank_account")
+  bankName     String   @map("bank_name")
+  phone        String
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("company_profile")
+}
+
+model Supplier {
+  id        String        @id @default(uuid())
+  name      String        @unique
+  contact   String?
+  phone     String?
+  address   String?
+  // 新增银行及类别字段
+  bankName  String?       @map("bank_name")
+  bankAccountName String? @map("bank_account_name")
+  bankAccountNumber String? @map("bank_account_number")
+  category  String?
+  note      String?
+  status    SupplierStatus @default(ENABLED)
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  products  Product[]
+
+  @@map("suppliers")
+}
+
+enum SupplierStatus {
+  ENABLED
+  DISABLED
+}
+
+model Product {
+  id        String   @id @default(uuid())
+  supplierId String  @map("supplier_id")
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  name      String
+  spec      String
+  price     Decimal  @db.Decimal(12, 2)
+  leadDays  Int      @default(0) @map("lead_days")
+  quantity  Int      @default(0)
+  description String?
+  note      String?
+  barcode   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  images         ProductImage[]
+  priceHistory   PriceHistory[]
+  quoteItems     QuoteItem[]
+
+  @@unique([supplierId, name, spec])
+  @@map("products")
+}
+
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  imageUrl  String   @map("image_url")
+  sort      Int      @default(0)
+
+  @@map("product_images")
+}
+
+model PriceHistory {
+  id          String   @id @default(uuid())
+  productId   String   @map("product_id")
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  oldPrice    Decimal  @map("old_price") @db.Decimal(12, 2)
+  newPrice    Decimal  @map("new_price") @db.Decimal(12, 2)
+  changedBy   String   @map("changed_by")
+  changedAt   DateTime @default(now()) @map("changed_at")
+
+  @@map("price_history")
+}
+
+model ImportJob {
+  id           String         @id @default(uuid())
+  fileName     String         @map("file_name")
+  uploaderId   String?        @map("uploader_id")
+  status       ImportStatus   @default(PENDING)
+  total        Int            @default(0)
+  successCount Int            @default(0) @map("success_count")
+  failedCount  Int            @default(0) @map("failed_count")
+  reportUrl    String?        @map("report_url")
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  @@map("import_jobs")
+}
+
+enum ImportStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model Quote {
+  id            String      @id @default(uuid())
+  code          String      @unique
+  creatorId     String      @map("creator_id")
+  creator       User        @relation(fields: [creatorId], references: [id])
+  customerName  String      @map("customer_name")
+  customerPhone String?     @map("customer_phone")
+  customerAddress String?   @map("customer_address")
+  currency      String      @default("CNY")
+  taxRate       Decimal     @default(0) @map("tax_rate") @db.Decimal(6, 4)
+  note          String?
+  status        QuoteStatus @default(DRAFT)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  items         QuoteItem[]
+
+  @@map("quotes")
+}
+
+enum QuoteStatus {
+  DRAFT
+  EXPORTED
+}
+
+model QuoteItem {
+  id           String @id @default(uuid())
+  quoteId      String @map("quote_id")
+  quote        Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  productId    String @map("product_id")
+  product      Product @relation(fields: [productId], references: [id])
+  quantity     Decimal @default(1) @db.Decimal(12, 2)
+  basePrice    Decimal @map("base_price") @db.Decimal(12, 2)
+  rowDelta     Decimal @default(0) @map("row_delta") @db.Decimal(6, 4)
+  rowAmount    Decimal @default(0) @map("row_amount") @db.Decimal(12, 2)
+  displayPrice Decimal @map("display_price") @db.Decimal(12, 2)
+
+  @@map("quote_items")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?  @map("entity_id")
+  summary   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("audit_logs")
+}

@@ -1,0 +1,159 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 磨玻璃效果全局样式 */
+@layer components {
+  .glass-card {
+    @apply bg-white/20 backdrop-blur-lg border border-white/30 rounded-lg shadow-lg;
+  }
+
+  .glass-button {
+    @apply bg-white/10 backdrop-blur-md border border-white/20 rounded-lg px-4 py-2 hover:bg-white/20 transition-all;
+  }
+}
+
+/* Ant Design 主按钮颜色通过 v5 Token 配置，不再额外覆盖 */
+:root {
+  --primary-color: #ff8a00; /* 继续用于滚动条等自定义样式 */
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--primary-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #ff7700;
+}
+
+/* 修复 AntD 与 Tailwind 预设冲突，保证登录表单布局正常 */
+.ant-card .ant-form,
+.ant-card .ant-form-item,
+.ant-card .ant-form-item-control,
+.ant-card .ant-form-item-control-input,
+.ant-card .ant-form-item-control-input-content {
+  width: 100%;
+}
+
+.ant-card .ant-input,
+.ant-card .ant-input-affix-wrapper,
+.ant-card .ant-input-password {
+  width: 100% !important;
+  box-sizing: border-box;
+}
+
+/* 保证输入框图标与内容在同一行居中显示 */
+.ant-input-affix-wrapper {
+  display: inline-flex !important; /* 恢复 AntD 默认，避免包裹层过度撑开影响点击区域 */
+  align-items: center !important;
+}
+
+.ant-input-affix-wrapper .ant-input-prefix,
+.ant-input-affix-wrapper .ant-input-suffix {
+  display: inline-flex;
+  align-items: center;
+}
+
+.ant-input-affix-wrapper .ant-input-suffix {
+  pointer-events: auto !important; /* 确保密码显示切换等图标可点击 */
+}
+
+.ant-card .ant-btn-block {
+  display: block !important;
+  width: 100% !important;
+}
+
+/* 固定菜单项高度与字体粗细，避免选中时轻微位移 */
+.ant-menu-light .ant-menu-item,
+.ant-menu-light .ant-menu-submenu-title {
+  height: 44px;
+  line-height: 44px;
+}
+
+.ant-menu-light .ant-menu-item-selected {
+  font-weight: 400 !important; /* 保持与未选中一致，避免换行/抖动 */
+}
+
+.ant-menu-light .ant-menu-item,
+.ant-menu-light .ant-menu-submenu-title {
+  transition: none !important; /* 关闭默认过渡，减少“动一下”感觉 */
+}
+
+/* Notification 与 Message 美化：更显眼但不刺眼 */
+.ant-notification-notice {
+  border-radius: 12px !important;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.08) !important;
+  background: rgba(255,255,255,0.95) !important;
+  border: 1px solid rgba(255,138,0,0.20) !important;
+}
+.ant-notification-notice .ant-notification-notice-content {
+  padding: 12px 16px !important;
+}
+.ant-notification-notice .ant-notification-notice-message {
+  color: #333 !important;
+  font-weight: 600 !important;
+}
+.ant-notification-notice .ant-notification-notice-description {
+  color: #666 !important;
+}
+
+/* Modal 标题区域去背景条、去分割线 */
+.ant-modal-header {
+  background: transparent !important;
+  border-bottom: none !important;
+}
+.ant-modal-title {
+  background: transparent !important;
+}
+
+.ant-message-notice-content {
+  border-radius: 12px !important;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.08) !important;
+  border: 1px solid rgba(255,138,0,0.20) !important;
+  background: rgba(255,138,0,0.08) !important;
+}
+
+/* 侧栏折叠触发器增强样式 */
+.sider-trigger-strong {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  color: var(--primary-color);
+  font-weight: 600;
+  background: rgba(255,138,0,0.12);
+  border-top: 1px solid rgba(255,138,0,0.25);
+  cursor: pointer;
+}
+.sider-trigger-strong:hover {
+  background: rgba(255,138,0,0.18);
+}
+.sider-trigger-strong .anticon {
+  font-size: 16px;
+}
+
+/* 小尺寸图片卡片（用于编辑弹窗上传控件） */
+.small-picture-card .ant-upload-select-picture-card,
+.small-picture-card .ant-upload-list-item,
+.small-picture-card .ant-upload-list-item-container {
+  width: 100px !important;
+  height: 100px !important;
+}
+.small-picture-card .ant-upload-select-picture-card {
+  margin: 0;
+}
+.small-picture-card .ant-upload-list-item-thumbnail img {
+  object-fit: cover;
+}
