@@ -43,6 +43,9 @@ export default function ProductsPage() {
   const [filterSupplierId, setFilterSupplierId] = useState<string | undefined>(undefined);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
+  // 请求取消与防抖
+  const productsAbortRef = useRef<AbortController | null>(null);
+  const reloadDebounceRef = useRef<number | null>(null);
 
   // 系统默认产品占位图（加载失败或无图时使用）
   const DEFAULT_PRODUCT_IMAGE = 'https://placehold.co/160x160?text=Product';
@@ -61,6 +64,12 @@ export default function ProductsPage() {
   const loadProducts = async (opts?: { search?: string; supplierId?: string; page?: number; pageSize?: number }) => {
     setLoading(true);
     try {
+      // 取消上一请求，避免竞态与不必要的渲染
+      if (productsAbortRef.current) {
+        productsAbortRef.current.abort();
+      }
+      const controller = new AbortController();
+      productsAbortRef.current = controller;
       const res = await axios.get('/api/products', {
         params: {
           search: opts?.search ?? undefined,
@@ -68,6 +77,7 @@ export default function ProductsPage() {
           page: opts?.page ?? currentPage,
           pageSize: opts?.pageSize ?? pageSize,
         },
+        signal: controller.signal,
       });
       const data = res.data;
       if (Array.isArray(data)) {
@@ -107,7 +117,6 @@ export default function ProductsPage() {
     setEditingProduct(record);
     form.setFieldsValue(record);
     // 预填充已有图片：首张为封面，其余为详情图
-    const base = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001';
     const sorted = Array.isArray(record.images) ? [...record.images].sort((a:any,b:any)=>a.sort-b.sort) : [];
     const cover = sorted[0];
     const details = sorted.slice(1);
@@ -115,7 +124,8 @@ export default function ProductsPage() {
       uid: img.id,
       name: '图片',
       status: 'done' as const,
-      url: (img.imageUrl || '').startsWith('/uploads') ? `${base}${img.imageUrl}` : img.imageUrl,
+      // 统一使用相对路径，Next 已通过 rewrites 将 /uploads 代理到后端
+      url: img.imageUrl,
       existingId: img.id,
     });
     setCoverFiles(cover ? [toUploadItem(cover)] : []);
@@ -157,10 +167,30 @@ export default function ProductsPage() {
   };
 
   useEffect(() => {
-    // 根据筛选条件重新加载数据
-    loadProducts({ search: searchText || undefined, supplierId: filterSupplierId || undefined, page: 1, pageSize });
-    setCurrentPage(1);
+    // 根据筛选条件重新加载数据（300ms 防抖）
+    if (reloadDebounceRef.current) {
+      window.clearTimeout(reloadDebounceRef.current);
+    }
+    reloadDebounceRef.current = window.setTimeout(() => {
+      loadProducts({ search: searchText || undefined, supplierId: filterSupplierId || undefined, page: 1, pageSize });
+      setCurrentPage(1);
+    }, 300);
+    return () => {
+      if (reloadDebounceRef.current) {
+        window.clearTimeout(reloadDebounceRef.current);
+        reloadDebounceRef.current = null;
+      }
+    };
   }, [searchText, filterSupplierId, pageSize]);
+
+  // 组件卸载时取消未完成请求
+  useEffect(() => {
+    return () => {
+      if (productsAbortRef.current) {
+        productsAbortRef.current.abort();
+      }
+    };
+  }, []);
 
   const handleSubmit = async (values: any) => {
     try {
@@ -225,9 +255,9 @@ export default function ProductsPage() {
       key: 'images',
       width: 80,
       render: (images: any[]) => {
-        const serverBase = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001';
         const url = images && images.length ? images.sort((a,b)=>a.sort-b.sort)[0].imageUrl : null;
-        const src = url ? (url.startsWith('/uploads') ? `${serverBase}${url}` : url) : DEFAULT_PRODUCT_IMAGE;
+        // 直接使用相对路径或远程绝对路径
+        const src = url ? url : DEFAULT_PRODUCT_IMAGE;
         return (
           <Image
             src={src}
@@ -557,7 +587,8 @@ export default function ProductsPage() {
                 <div>
                   {Array.isArray(viewing.images) && viewing.images.length ? (
                     <Image
-                      src={(process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001') + (viewing.images.sort((a:any,b:any)=>a.sort-b.sort)[0].imageUrl || '')}
+                      // 使用相对路径，避免硬编码后端域名
+                      src={(viewing.images.sort((a:any,b:any)=>a.sort-b.sort)[0].imageUrl || '')}
                       alt="cover"
                       width={160}
                       height={160}
@@ -598,7 +629,7 @@ export default function ProductsPage() {
                   <div className="flex flex-wrap gap-6 items-center">
                     <Image.PreviewGroup>
                       {viewing.images.sort((a:any,b:any)=>a.sort-b.sort).map((img:any)=>{
-                        const src = (process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001') + img.imageUrl;
+                        const src = img.imageUrl;
                         return (
                           <Image
                             key={img.id}

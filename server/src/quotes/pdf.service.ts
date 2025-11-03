@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompanyService } from '../company/company.service';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 @Injectable()
 export class PdfService {
@@ -75,26 +77,75 @@ export class PdfService {
   }
 
   private generateQuoteHtml(quote: any, company: any, subtotal: number, tax: number, total: number): string {
+    const serverUrl = process.env.SERVER_URL || 'http://127.0.0.1:3001';
     const toAbsolute = (url?: string) => {
       if (!url) return '';
-      return /^(https?:)?\/\//.test(url) ? url : `http://localhost:3001${url}`;
+      return /^(https?:)?\/\//.test(url) ? url : `${serverUrl}${url}`;
     };
+    // Try to embed local CJK fonts to avoid garbled text in PDF (offline-safe)
+    const tryReadFont = (candidates: Array<{ rel: string; fmt: 'truetype' | 'opentype'; mime: string }>) => {
+      for (const c of candidates) {
+        try {
+          const absPath = path.resolve(process.cwd(), c.rel);
+          const data = fs.readFileSync(absPath);
+          return { b64: data.toString('base64'), fmt: c.fmt, mime: c.mime };
+        } catch {
+          // continue
+        }
+      }
+      return null;
+    };
+
+    // Support both .ttf and .otf, and allow fonts placed under a subfolder
+    const regularFont = tryReadFont([
+      { rel: 'server/assets/fonts/NotoSansCJKsc-Regular.ttf', fmt: 'truetype', mime: 'font/truetype' },
+      { rel: 'server/assets/fonts/NotoSansCJKsc-Regular.otf', fmt: 'opentype', mime: 'font/opentype' },
+      { rel: 'server/assets/fonts/NotoSansCJK-SC/NotoSansCJKsc-Regular.ttf', fmt: 'truetype', mime: 'font/truetype' },
+      { rel: 'server/assets/fonts/NotoSansCJK-SC/NotoSansCJKsc-Regular.otf', fmt: 'opentype', mime: 'font/opentype' },
+    ]);
+    const boldFont = tryReadFont([
+      { rel: 'server/assets/fonts/NotoSansCJKsc-Bold.ttf', fmt: 'truetype', mime: 'font/truetype' },
+      { rel: 'server/assets/fonts/NotoSansCJKsc-Bold.otf', fmt: 'opentype', mime: 'font/opentype' },
+      { rel: 'server/assets/fonts/NotoSansCJK-SC/NotoSansCJKsc-Bold.ttf', fmt: 'truetype', mime: 'font/truetype' },
+      { rel: 'server/assets/fonts/NotoSansCJK-SC/NotoSansCJKsc-Bold.otf', fmt: 'opentype', mime: 'font/opentype' },
+    ]);
+
+    const buildFontFace = (b64: string, fmt: 'truetype' | 'opentype', weight: number, mime: string) => (
+      `@font-face { font-family: 'NotoSansCJKsc'; font-style: normal; font-weight: ${weight}; src: url('data:${mime};base64,${b64}') format('${fmt}'); }`
+    );
+
+    const fontCssParts: string[] = [];
+    if (regularFont) fontCssParts.push(buildFontFace(regularFont.b64, regularFont.fmt, 400, regularFont.mime));
+    if (boldFont) fontCssParts.push(buildFontFace(boldFont.b64, boldFont.fmt, 700, boldFont.mime));
+    const embeddedFontsCss = fontCssParts.join('\n');
+
+    const webfontLink = embeddedFontsCss
+      ? ''
+      : '<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">';
     return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
+  ${webfontLink}
   <style>
+    ${embeddedFontsCss}
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
     body {
-      font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
+      /* 使用内嵌中文字体，避免导出 PDF 乱码；若无内嵌则使用 Web 字体 */
+      font-family: 'NotoSansCJKsc', 'Noto Sans SC', 'Microsoft YaHei', 'SimHei', Arial, sans-serif;
       font-size: 14px;
       line-height: 1.6;
       color: #333;
+    }
+    /* 版心：确保不超出打印范围（A4 210mm，左右边距合计 30mm → 内容 180mm） */
+    .content {
+      width: 180mm;
+      margin: 0 auto;
     }
     .header {
       display: flex;
@@ -141,11 +192,14 @@ export class PdfService {
       width: 100%;
       border-collapse: collapse;
       margin-bottom: 20px;
+      table-layout: fixed; /* 固定布局，避免列宽随机变化 */
     }
     th, td {
       padding: 8px;
       text-align: left;
       border-bottom: 1px solid #ddd;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
     th {
       background-color: #ff8a00;
@@ -158,7 +212,7 @@ export class PdfService {
     tbody tr:nth-child(odd) { background-color: #fafafa; }
     .cell-small { font-size: 12px; }
     .text-right { text-align: right; }
-    .product-thumb { width: 56px; height: 40px; object-fit: cover; border: 1px solid #eee; border-radius: 4px; }
+    .product-thumb { width: 60px; height: 44px; object-fit: cover; border: 1px solid #eee; border-radius: 4px; }
     .desc { color: #555; }
     .summary {
       display: flex;
@@ -187,6 +241,7 @@ export class PdfService {
   </style>
 </head>
 <body>
+  <div class="content">
   <div class="header">
     ${company.logoUrl ? `<img src="${toAbsolute(company.logoUrl)}" alt="Logo" class="logo">` : '<div class="logo"></div>'}
     <div class="company-info">
@@ -211,6 +266,17 @@ export class PdfService {
   </div>
 
   <table>
+    <colgroup>
+      <col style="width:5%">
+      <col style="width:10%">
+      <col style="width:16%">
+      <col style="width:10%">
+      <col style="width:28%">
+      <col style="width:7%">
+      <col style="width:8%">
+      <col style="width:8%">
+      <col style="width:8%">
+    </colgroup>
     <thead>
       <tr>
         <th>序号</th>
@@ -264,6 +330,7 @@ export class PdfService {
 
   <div class="footer">
     <p>本报价单由系统自动生成</p>
+  </div>
   </div>
 </body>
 </html>

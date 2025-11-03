@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, Table, Button, Input, InputNumber, Form, Space, Modal, Select, message } from 'antd';
 import { formatCategoryLabel } from '@/app/constants/supplierCategories';
@@ -38,6 +38,10 @@ export default function QuoteDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
+  // 为行内编辑添加防抖，避免频繁 PATCH 造成卡顿
+  const qtyDebounceMap = useRef<Record<string, number>>({});
+  const percentDebounceMap = useRef<Record<string, number>>({});
+  const amountDebounceMap = useRef<Record<string, number>>({});
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
@@ -79,6 +83,18 @@ export default function QuoteDetailPage() {
 
     loadQuote();
   }, [params.id]);
+
+  // 卸载时清理所有定时器，避免内存泄漏
+  useEffect(() => {
+    return () => {
+      Object.values(qtyDebounceMap.current).forEach((tid) => tid && window.clearTimeout(tid));
+      Object.values(percentDebounceMap.current).forEach((tid) => tid && window.clearTimeout(tid));
+      Object.values(amountDebounceMap.current).forEach((tid) => tid && window.clearTimeout(tid));
+      qtyDebounceMap.current = {};
+      percentDebounceMap.current = {};
+      amountDebounceMap.current = {};
+    };
+  }, []);
 
   const loadQuote = async () => {
     setLoading(true);
@@ -154,9 +170,13 @@ export default function QuoteDetailPage() {
           value={Number(quantity)}
           onChange={(val) => {
             const v = Number(val || 0);
-            axios.patch(`/api/quotes/items/${record.id}`, { quantity: v })
-              .then(() => loadQuote())
-              .catch(() => message.error('更新数量失败'));
+            const tid = qtyDebounceMap.current[record.id];
+            if (tid) window.clearTimeout(tid);
+            qtyDebounceMap.current[record.id] = window.setTimeout(() => {
+              axios.patch(`/api/quotes/items/${record.id}`, { quantity: v })
+                .then(() => loadQuote())
+                .catch(() => message.error('更新数量失败'));
+            }, 400);
           }}
         />
       ),
@@ -193,9 +213,13 @@ export default function QuoteDetailPage() {
               style={{ width: 110 }}
               onChange={(val) => {
                 const v = Number(val || 0) / 100;
-                axios.patch(`/api/quotes/items/${record.id}`, { rowDelta: v })
-                  .then(() => loadQuote())
-                  .catch(() => message.error('更新百分比失败'));
+                const tid = percentDebounceMap.current[record.id];
+                if (tid) window.clearTimeout(tid);
+                percentDebounceMap.current[record.id] = window.setTimeout(() => {
+                  axios.patch(`/api/quotes/items/${record.id}`, { rowDelta: v })
+                    .then(() => loadQuote())
+                    .catch(() => message.error('更新百分比失败'));
+                }, 400);
               }}
             />
             <InputNumber
@@ -206,9 +230,13 @@ export default function QuoteDetailPage() {
               style={{ width: 120 }}
               onChange={(val) => {
                 const v = Number(val || 0);
-                axios.patch(`/api/quotes/items/${record.id}`, { rowAmount: v })
-                  .then(() => loadQuote())
-                  .catch(() => message.error('更新加减金额失败'));
+                const tid = amountDebounceMap.current[record.id];
+                if (tid) window.clearTimeout(tid);
+                amountDebounceMap.current[record.id] = window.setTimeout(() => {
+                  axios.patch(`/api/quotes/items/${record.id}`, { rowAmount: v })
+                    .then(() => loadQuote())
+                    .catch(() => message.error('更新加减金额失败'));
+                }, 400);
               }}
             />
           </div>

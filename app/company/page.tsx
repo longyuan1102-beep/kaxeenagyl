@@ -27,7 +27,9 @@ export default function CompanyPage() {
 
   const toAbsolute = (url?: string) => {
     if (!url) return '';
-    return /^(https?:)?\/\//.test(url) ? url : `http://localhost:3001${url}`;
+    // 在生产中通过 Next 的 rewrites 代理到后端：/uploads/* -> SERVER_URL/uploads/*
+    // 因此这里返回相对路径以确保浏览器可访问。
+    return /^(https?:)?\/\//.test(url) ? url : url;
   };
 
   useEffect(() => {
