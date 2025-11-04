@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Table, Button, Input, Space, Modal, Form, Card, App, Select, Row, Col, Descriptions } from 'antd';
+import Link from 'next/link';
 import { SUPPLIER_CATEGORIES, formatCategoryLabel } from '@/app/constants/supplierCategories';
 import { PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, CopyOutlined } from '@ant-design/icons';
 import MainLayout from '@/components/Layout/MainLayout';
@@ -39,6 +40,8 @@ export default function SuppliersPage() {
   const [form] = Form.useForm();
   const { message, notification } = App.useApp();
   const didInit = useRef(false);
+  const reloadDebounceRef = useRef<number | null>(null);
+  const suppliersAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (didInit.current) return;
@@ -59,7 +62,12 @@ export default function SuppliersPage() {
       if (opts?.phone) params.phone = opts.phone;
       params.page = opts?.page ?? currentPage;
       params.pageSize = opts?.pageSize ?? pageSize;
-      const res = await axios.get('/api/suppliers', { params });
+      // 取消上一个未完成请求
+      if (suppliersAbortRef.current) {
+        suppliersAbortRef.current.abort();
+      }
+      suppliersAbortRef.current = new AbortController();
+      const res = await axios.get('/api/suppliers', { params, signal: suppliersAbortRef.current.signal });
       const data = res.data;
       if (Array.isArray(data)) {
         // 兼容旧返回格式
@@ -79,17 +87,37 @@ export default function SuppliersPage() {
   };
 
   useEffect(() => {
-    // 根据筛选条件重新加载数据
-    loadSuppliers({
-      name: searchName || undefined,
-      category: filterCategory || undefined,
-      phone: searchPhone || undefined,
-      page: 1,
-      pageSize,
-    });
-    setCurrentPage(1);
+    // 根据筛选条件重新加载数据（300ms 防抖）
+    if (reloadDebounceRef.current) {
+      window.clearTimeout(reloadDebounceRef.current);
+    }
+    reloadDebounceRef.current = window.setTimeout(() => {
+      loadSuppliers({
+        name: searchName || undefined,
+        category: filterCategory || undefined,
+        phone: searchPhone || undefined,
+        page: 1,
+        pageSize,
+      });
+      setCurrentPage(1);
+    }, 300);
+    return () => {
+      if (reloadDebounceRef.current) {
+        window.clearTimeout(reloadDebounceRef.current);
+        reloadDebounceRef.current = null;
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchName, filterCategory, searchPhone, pageSize]);
+
+  // 卸载时取消未完成请求
+  useEffect(() => {
+    return () => {
+      if (suppliersAbortRef.current) {
+        suppliersAbortRef.current.abort();
+      }
+    };
+  }, []);
 
   const handleAdd = () => {
     setEditingSupplier(null);
@@ -166,12 +194,13 @@ export default function SuppliersPage() {
       width: 220,
       ellipsis: true,
       render: (text: string, record: Supplier) => (
-        <a
+        <Link
           className="text-[var(--primary-color)] hover:underline"
           href={`/suppliers/${record.id}`}
+          prefetch
         >
           {text}
-        </a>
+        </Link>
       ),
     },
     {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { Layout, Menu, Avatar, Dropdown, App } from 'antd';
 import {
   DashboardOutlined,
@@ -28,43 +29,45 @@ export default function MainLayout({ user, children }: MainLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const { message, notification } = App.useApp();
+  const { message } = App.useApp();
 
   const menuItems = [
     {
       key: '/dashboard',
       icon: <DashboardOutlined />,
-      label: '仪表盘',
+      label: <Link href="/dashboard" prefetch>仪表盘</Link>,
     },
     {
       key: '/suppliers',
       icon: <ShopOutlined />,
-      label: '供应商管理',
+      label: <Link href="/suppliers" prefetch>供应商管理</Link>,
     },
     {
       key: '/products',
       icon: <AppstoreOutlined />,
-      label: '产品管理',
+      label: <Link href="/products" prefetch>产品管理</Link>,
     },
     {
       key: '/import',
       icon: <ImportOutlined />,
-      label: '产品导入',
+      label: <Link href="/import" prefetch>产品导入</Link>,
     },
     {
       key: '/quotes',
       icon: <FileTextOutlined />,
-      label: '报价单',
+      label: <Link href="/quotes" prefetch>报价单</Link>,
     },
     {
       key: '/company',
       icon: <BankOutlined />,
-      label: '公司抬头',
+      label: <Link href="/company" prefetch>公司抬头</Link>,
+      disabled: user?.role !== 'OWNER',
     },
     {
       key: '/users',
       icon: <UsergroupAddOutlined />,
-      label: '用户管理',
+      label: <Link href="/users" prefetch>用户管理</Link>,
+      disabled: user?.role !== 'OWNER',
     },
   ];
 
@@ -138,22 +141,6 @@ export default function MainLayout({ user, children }: MainLayoutProps) {
           selectedKeys={selectedKey ? [selectedKey] : []}
           mode="inline"
           items={menuItems}
-          onClick={({ key }) => {
-            const isOwner = user?.role === 'OWNER';
-            if ((key === '/company' || key === '/users') && !isOwner) {
-              notification.warning({
-                message: '无权限操作',
-                description: '当前账号无权限访问此功能，请联系管理员',
-                placement: 'topRight',
-                key: 'no-permission',
-                duration: 3,
-              });
-              return;
-            }
-            if (pathname !== key) {
-              router.push(key);
-            }
-          }}
         />
       </Sider>
 
